@@ -40,8 +40,11 @@ public class DriveSubsystem extends SubsystemBase {
   // The gyro sensor
   private final AHRS navx = new AHRS();
 
-  // Odometry class for tracking robot pose
+    // Odometry class for tracking robot pose
   private final DifferentialDriveOdometry m_odometry;
+  private final DifferentialDriveKinematics m_kinematics = new DifferentialDriveKinematics(DriveConstants.kTrackwidthMeters);
+  private final PIDController xPidController = new PIDController(AutoConstants.kPXController, AutoConstants.kIXController, AutoConstants.kDXController);
+  private final PIDController yawPidController = new PIDController(AutoConstants.kPYawController, AutoConstants.KIYawController, AutoConstants.kDYawController);
 
   /** Creates a new DriveSubsystem. */
   public DriveSubsystem() {
@@ -60,6 +63,28 @@ public class DriveSubsystem extends SubsystemBase {
     m_odometry =
         new DifferentialDriveOdometry(
             navx.getRotation2d(), getLeftRelativeEncoderDistance(), getRightRelativeEncoderDistance());
+
+          AutoBuilder.configureRamsete(
+                this::getPose, // Robot pose supplier
+                this::resetOdometry, // Method to reset odometry (will be called if your auto has a starting pose)
+                this::getChassisSpeeds, // Current ChassisSpeeds supplier
+                this::drive,
+                AutoConstants.kRamseteB,
+                AutoConstants.kRamseteZeta, // Method that will drive the robot given ChassisSpeeds
+                new ReplanningConfig(), // Default path replanning config. See the API for the options here
+                () -> {
+                    // Boolean supplier that controls when the path will be mirrored for the red alliance
+                    // This will flip the path being followed to the red side of the field.
+                    // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
+
+                    var alliance = DriverStation.getAlliance();
+                    if (alliance.isPresent()) {
+                        return alliance.get() == DriverStation.Alliance.Red;
+                    }
+                    return false;
+                },
+                this // Reference to this subsystem to set requirements
+        );
   }
 
   @Override
@@ -68,6 +93,28 @@ public class DriveSubsystem extends SubsystemBase {
     m_odometry.update(
         navx.getRotation2d(), getLeftRelativeEncoderDistance(), getRightRelativeEncoderDistance());
   }
+
+  public Command followPathCommand(String pathName) {
+        PathPlannerPath path = PathPlannerPath.fromPathFile(pathName);
+        return new FollowPathRamsete(
+                path,
+                this::getPose, // Robot pose supplier
+                this::getChassisSpeeds, // Current ChassisSpeeds supplier
+                this::drive, // Method that will drive the robot given ChassisSpeeds
+                new ReplanningConfig(), // Default path replanning config. See the API for the options here
+                () -> {
+                    // Boolean supplier that controls when the path will be mirrored for the red alliance
+                    // This will flip the path being followed to the red side of the field.
+                    // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
+                    var alliance = DriverStation.getAlliance();
+                    if (alliance.isPresent()) {
+                        return alliance.get() == DriverStation.Alliance.Red;
+                    }
+                    return false;
+                },
+                this // Reference to this subsystem to set requirements
+        );
+    }
 
   /**
    * Returns the currently-estimated pose of the robot.
@@ -104,6 +151,15 @@ public class DriveSubsystem extends SubsystemBase {
     resetEncoders();
     m_odometry.resetPosition(
         navx.getRotation2d(), getLeftRelativeEncoderDistance(), getRightRelativeEncoderDistance(), pose);
+  }
+
+   public void drive(ChassisSpeeds speeds){
+    m_drive.feed();  
+
+    xPidController.setSetpoint(speeds.vxMetersPerSecond);
+    yawPidController.setSetpoint(speeds.omegaRadiansPerSecond);
+
+    m_drive.arcadeDrive(xPidController.calculate(getChassisSpeeds().vxMetersPerSecond), yawPidController.calculate(getChassisSpeeds().omegaRadiansPerSecond));
   }
 
   /**
