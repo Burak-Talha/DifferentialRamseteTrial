@@ -46,10 +46,16 @@ public final class Constants {
 
   public static final class AutoConstants {
     public static final double kMaxSpeedMetersPerSecond = 3;
-    public static final double kMaxAccelerationMetersPerSecondSquared = 1;
+    public static final double kMaxAccelerationMetersPerSecondSquared = 3;
 
     // Reasonable baseline values for a RAMSETE follower in units of meters and seconds
-    public static final double kRamseteB = 2;
-    public static final double kRamseteZeta = 0.7;
+    public static final double kRamseteB = 2.3;
+    public static final double kRamseteZeta = 1.5;
+    public static final double kPXController = 0.8;
+    public static double kIXController = 0.0001;
+    public static double kDXController = 0.00001;
+    public static final double kPYawController = 0.8;
+    public static final double KIYawController = 0.0001;
+    public static double kDYawController = 0.00001;
   }
 }
